@@ -656,17 +656,11 @@ def setup_student_tab(tab, student_id):
     assignments_tree.heading('Grade', text='Grade')
     assignments_tree.pack(fill='both', expand=True)
     
-    # Add scrollbar
-    scrollbar = ttk.Scrollbar(tab, orient="vertical", command=assignments_tree.yview)
-    scrollbar.pack(side='right', fill='y')
-    assignments_tree.configure(yscrollcommand=scrollbar.set)
-    
-    # Load assignments
     try:
         conn = db_connection()
         cursor = conn.cursor()
         
-        # Using the view we created
+        # Fixed query using proper column name
         cursor.execute("""
         SELECT course_name, title, submission_date, status, grade
         FROM student_assignment_view
@@ -675,11 +669,6 @@ def setup_student_tab(tab, student_id):
         
         for row in cursor.fetchall():
             assignments_tree.insert('', 'end', values=row)
-        
-        # Using the function we created
-        cursor.execute("SELECT count_assignments(%s)", (student_id,))
-        count = cursor.fetchone()[0]
-        tk.Label(tab, text=f"Total Assignments: {count}").pack(pady=10)
         
         cursor.close()
         conn.close()
