@@ -2,15 +2,17 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 import mysql.connector
 from datetime import datetime
+import os
 
 def db_connection():
     try:
         conn = mysql.connector.connect(
-            host="localhost",
-            user="root",
-            password="root",
-            database="department_management"
-        )
+    host=os.getenv("MYSQL_HOST", "localhost"),
+    user=os.getenv("MYSQL_USER", "root"),
+    password=os.getenv("MYSQL_PASSWORD", "root"),
+    database=os.getenv("MYSQL_DATABASE", "department_management")
+)
+
         return conn
     except mysql.connector.Error as err:
         messagebox.showerror("Database Error", f"Error connecting to database: {err}")
@@ -19,10 +21,11 @@ def db_connection():
 def initialize_database():
     try:
         conn = mysql.connector.connect(
-            host="localhost",
-            user="root",
-            password="root"
-        )
+    host=os.getenv("MYSQL_HOST", "localhost"),
+    user=os.getenv("MYSQL_USER", "root"),
+    password=os.getenv("MYSQL_PASSWORD", "root")
+)
+
         cursor = conn.cursor()
         
         # Create database if not exists
