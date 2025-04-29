@@ -3,7 +3,6 @@ from tkinter import messagebox, ttk
 import mysql.connector
 from datetime import datetime
 
-# Database connection function with error handling
 def db_connection():
     try:
         conn = mysql.connector.connect(
@@ -17,7 +16,6 @@ def db_connection():
         messagebox.showerror("Database Error", f"Error connecting to database: {err}")
         return None
 
-# Initialize database with required tables, views, and procedures
 def initialize_database():
     try:
         conn = mysql.connector.connect(
@@ -176,7 +174,6 @@ def initialize_database():
         END
         """)
         
-        # Insert sample data if tables are empty
         cursor.execute("SELECT COUNT(*) FROM faculty")
         if cursor.fetchone()[0] == 0:
             cursor.execute("""
@@ -222,7 +219,6 @@ def initialize_database():
     except mysql.connector.Error as err:
         messagebox.showerror("Initialization Error", f"Error initializing database: {err}")
 
-# Login function with parameterized query to prevent SQL injection
 def login():
     username = entry_username.get()
     password = entry_password.get()
