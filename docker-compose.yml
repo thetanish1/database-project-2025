@@ -1,25 +1,20 @@
-version: '3.8'
-
+version: '3'
 services:
-  web:
-    image: myfirstpythonapp
-    build: .
-    ports:
-      - "5000:5000"
-    environment:
-      MYSQL_HOST: mysql
-      MYSQL_USER: root
-      MYSQL_PASSWORD: root
-      MYSQL_DATABASE: department_management
-  mysql:
+  db:
     image: mysql:5.7
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: department_management
     ports:
-      - "3307:3306"
-    volumes:
-      - mysql-data:/var/lib/mysql
-
-volumes:
-  mysql-data:
+      - "3306:3306"
+  app:
+    build: .
+    depends_on:
+      - db
+    environment:
+      MYSQL_HOST: db
+      MYSQL_USER: root
+      MYSQL_PASSWORD: root
+      MYSQL_DATABASE: department_management
+    ports:
+      - "5000:5000"
