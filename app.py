@@ -1134,23 +1134,27 @@ def submit_grade(assignment_cb, grade_entry):
 
 # Student Tab: View assignments
 def setup_student_tab(tab, student_id):
-    # Main container frame
-    main_frame = ttk.Frame(tab)
-    main_frame.pack(fill='both', expand=True, padx=10, pady=10)
-
-    # Title label
-    title_label = ttk.Label(main_frame, text="Your Assignments", font=('Arial', 12, 'bold'))
-    title_label.pack(pady=10)
-
-    # Treeview with scrollbar
-    tree_frame = ttk.Frame(main_frame)
-    tree_frame.pack(fill='both', expand=True)
+    # Create notebook for tabs
+    notebook = ttk.Notebook(tab)
+    notebook.pack(fill='both', expand=True)
+    
+    # Tab 1: My Assignments
+    assignments_tab = ttk.Frame(notebook)
+    notebook.add(assignments_tab, text="My Assignments")
+    
+    # Tab 2: Submit Work
+    submit_tab = ttk.Frame(notebook)
+    notebook.add(submit_tab, text="Submit Work")
+    
+    # ===== My Assignments Tab =====
+    tree_frame = ttk.Frame(assignments_tab)
+    tree_frame.pack(fill='both', expand=True, padx=10, pady=10)
 
     scrollbar = ttk.Scrollbar(tree_frame)
     scrollbar.pack(side='right', fill='y')
 
     assignments_tree = ttk.Treeview(tree_frame,
-                                 columns=('id', 'course', 'title', 'due_date', 'status', 'grade'),
+                                 columns=('id', 'course', 'title', 'due_date', 'status', 'grade', 'faculty'),
                                  yscrollcommand=scrollbar.set,
                                  show='headings',
                                  height=15)
@@ -1158,56 +1162,166 @@ def setup_student_tab(tab, student_id):
     scrollbar.config(command=assignments_tree.yview)
 
     # Configure columns
-    assignments_tree.heading('id', text='#')
-    assignments_tree.heading('course', text='Course')
-    assignments_tree.heading('title', text='Assignment')
-    assignments_tree.heading('due_date', text='Due Date')
-    assignments_tree.heading('status', text='Status')
-    assignments_tree.heading('grade', text='Grade')
+    columns = [
+        ('id', '#', 50),
+        ('course', 'Course', 150),
+        ('title', 'Assignment', 200),
+        ('due_date', 'Due Date', 100),
+        ('status', 'Status', 100),
+        ('grade', 'Grade', 80),
+        ('faculty', 'Faculty', 150)
+    ]
+    
+    for col_id, col_text, col_width in columns:
+        assignments_tree.heading(col_id, text=col_text)
+        assignments_tree.column(col_id, width=col_width, anchor='center')
 
-    assignments_tree.column('id', width=50, anchor='center')
-    assignments_tree.column('course', width=150)
-    assignments_tree.column('title', width=200)
-    assignments_tree.column('due_date', width=100, anchor='center')
-    assignments_tree.column('status', width=100, anchor='center')
-    assignments_tree.column('grade', width=80, anchor='center')
+    # ===== Submit Work Tab =====
+    submit_frame = ttk.Frame(submit_tab)
+    submit_frame.pack(fill='both', expand=True, padx=20, pady=20)
 
-    def load_assignments():
+    # Assignment selection
+    ttk.Label(submit_frame, text="Select Assignment to Submit:").pack(pady=5)
+    assignment_combobox = ttk.Combobox(submit_frame, state="readonly")
+    assignment_combobox.pack(fill='x', pady=5)
+
+    # Faculty info display
+    faculty_frame = ttk.LabelFrame(submit_frame, text="Submit To", padding=10)
+    faculty_frame.pack(fill='x', pady=10)
+    
+    ttk.Label(faculty_frame, text="Faculty:").pack(anchor='w')
+    faculty_label = ttk.Label(faculty_frame, text="", font=('Arial', 10, 'bold'))
+    faculty_label.pack(anchor='w')
+    
+    ttk.Label(faculty_frame, text="Course:").pack(anchor='w', pady=(5,0))
+    course_label = ttk.Label(faculty_frame, text="")
+    course_label.pack(anchor='w')
+
+    # Message section
+    ttk.Label(submit_frame, text="Submission Message:").pack(pady=(10,5))
+    message_text = tk.Text(submit_frame, height=5, wrap='word')
+    message_text.pack(fill='x', pady=5)
+
+    # Submit button
+    submit_btn = ttk.Button(submit_frame, text="Submit Assignment", 
+                          command=lambda: submit_assignment(
+                              assignment_combobox.get(),
+                              message_text.get("1.0", tk.END),
+                              load_data))
+    submit_btn.pack(pady=10)
+
+    def load_data():
         try:
-            # Clear existing data
-            for item in assignments_tree.get_children():
-                assignments_tree.delete(item)
-
             conn = db_connection()
-            cursor = conn.cursor()
-
-            # Get assignments for this specific student
+            cursor = conn.cursor(dictionary=True)
+            
+            # Load assignments for both tabs
             cursor.execute("""
             SELECT 
                 a.assignment_id,
-                CONCAT(c.course_code, ' - ', c.course_name),
+                c.course_code,
+                c.course_name,
                 a.title,
-                DATE_FORMAT(a.submission_date, '%Y-%m-%d'),
+                DATE_FORMAT(a.submission_date, '%Y-%m-%d') as due_date,
                 a.status,
-                IFNULL(a.grade, '-')
+                IFNULL(a.grade, '-') as grade,
+                f.name as faculty_name
             FROM student_assignments a
             JOIN courses c ON a.course_id = c.course_id
+            JOIN faculty f ON a.faculty_id = f.faculty_id
             WHERE a.student_id = %s
             ORDER BY a.submission_date
             """, (student_id,))
-
-            # Add data to treeview
-            for i, row in enumerate(cursor.fetchall(), 1):
-                assignments_tree.insert('', 'end', values=(i,) + row[1:])
-
+            
+            assignments = cursor.fetchall()
+            
+            # Update My Assignments tab
+            assignments_tree.delete(*assignments_tree.get_children())
+            for i, assignment in enumerate(assignments, 1):
+                assignments_tree.insert('', 'end', 
+                                     values=(
+                                         i,
+                                         f"{assignment['course_code']} - {assignment['course_name']}",
+                                         assignment['title'],
+                                         assignment['due_date'],
+                                         assignment['status'],
+                                         assignment['grade'],
+                                         assignment['faculty_name']
+                                     ))
+            
+            # Update Submit Work combobox (only pending assignments)
+            pending_assignments = [a for a in assignments if a['status'] == 'Pending']
+            assignment_combobox['values'] = [
+                f"{i+1}. {a['title']} ({a['course_code']})" 
+                for i, a in enumerate(pending_assignments)
+            ]
+            
+            # Update faculty info when assignment selected
+            def update_faculty_info(event):
+                if assignment_combobox.current() >= 0:
+                    selected = pending_assignments[assignment_combobox.current()]
+                    faculty_label.config(text=selected['faculty_name'])
+                    course_label.config(text=f"{selected['course_code']} - {selected['course_name']}")
+            
+            assignment_combobox.bind('<<ComboboxSelected>>', update_faculty_info)
+            
             cursor.close()
             conn.close()
-
+            
         except mysql.connector.Error as err:
             messagebox.showerror("Database Error", f"Failed to load assignments: {err}")
 
+    def submit_assignment(assignment_selection, message, callback):
+        if not assignment_selection:
+            messagebox.showerror("Error", "Please select an assignment to submit")
+            return
+        
+        if not message.strip():
+            messagebox.showerror("Error", "Please enter a submission message")
+            return
+            
+        try:
+            # Get assignment ID from selection (format: "1. Assignment Title (CS101)")
+            assignment_id = int(assignment_selection.split('.')[0]) - 1
+            conn = db_connection()
+            cursor = conn.cursor()
+            
+            # Get the actual assignment ID from pending assignments
+            cursor.execute("""
+            SELECT assignment_id 
+            FROM student_assignments 
+            WHERE student_id = %s AND status = 'Pending'
+            ORDER BY submission_date
+            LIMIT 1 OFFSET %s
+            """, (student_id, assignment_id))
+            
+            result = cursor.fetchone()
+            if not result:
+                raise ValueError("Selected assignment not found")
+            
+            actual_assignment_id = result[0]
+            
+            # Update assignment status
+            cursor.execute("""
+            UPDATE student_assignments 
+            SET status = 'Submitted', 
+                submission_message = %s,
+                submission_date = CURDATE()
+            WHERE assignment_id = %s
+            """, (message.strip(), actual_assignment_id))
+            
+            conn.commit()
+            messagebox.showinfo("Success", "Assignment submitted successfully!")
+            callback()  # Refresh data
+            
+            cursor.close()
+            conn.close()
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to submit assignment: {str(e)}")
+
     # Initial load
-    load_assignments()
+    load_data()
 
     # Refresh button
     refresh_btn = ttk.Button(main_frame, text="Refresh", command=load_assignments)
