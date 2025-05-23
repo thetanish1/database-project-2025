@@ -1137,7 +1137,9 @@ def setup_student_tab(tab, student_id):
     # Display assignments
     tk.Label(tab, text="Your Assignments:", font=('Arial', 10, 'bold')).pack(pady=10)
     
-    assignments_tree = ttk.Treeview(tab, columns=('#', 'Course', 'Title', 'Due Date', 'Status', 'Grade'), show='headings')
+    assignments_tree = ttk.Treeview(tab, 
+                                 columns=('#', 'Course', 'Title', 'Due Date', 'Status', 'Grade'), 
+                                 show='headings')
     assignments_tree.heading('#', text='#')
     assignments_tree.heading('Course', text='Course')
     assignments_tree.heading('Title', text='Title')
@@ -1146,31 +1148,44 @@ def setup_student_tab(tab, student_id):
     assignments_tree.heading('Grade', text='Grade')
     assignments_tree.pack(fill='both', expand=True)
     
-    try:
-        conn = db_connection()
-        cursor = conn.cursor()
-        
-        # Use the student_id column from the view
-        cursor.execute("""
-        SELECT 
-            ROW_NUMBER() OVER (ORDER BY submission_date) as row_num,
-            course_name, 
-            title, 
-            submission_date, 
-            status, 
-            grade
-        FROM student_assignment_view
-        WHERE student_id = %s
-        """, (student_id,))
-        
-        for row in cursor.fetchall():
-            assignments_tree.insert('', 'end', values=row)
-        
-        cursor.close()
-        conn.close()
-    except mysql.connector.Error as err:
-        messagebox.showerror("Database Error", f"Error loading assignments: {err}")
-        
+    def load_assignments():
+        try:
+            # Clear existing data
+            for item in assignments_tree.get_children():
+                assignments_tree.delete(item)
+            
+            conn = db_connection()
+            cursor = conn.cursor()
+            
+            # Simplified query that doesn't depend on course_code
+            cursor.execute("""
+            SELECT 
+                ROW_NUMBER() OVER (ORDER BY a.submission_date) as row_num,
+                c.course_name as course,
+                a.title,
+                DATE_FORMAT(a.submission_date, '%Y-%m-%d'),
+                a.status,
+                IFNULL(a.grade, 'N/A')
+            FROM student_assignments a
+            JOIN students s ON a.student_id = s.student_id
+            JOIN courses c ON a.course_id = c.course_id
+            WHERE s.student_id = %s
+            """, (student_id,))
+            
+            # Add data to treeview
+            for row in cursor.fetchall():
+                assignments_tree.insert('', 'end', values=row)
+            
+            cursor.close()
+            conn.close()
+        except mysql.connector.Error as err:
+            messagebox.showerror("Database Error", f"Error loading assignments: {err}")
+            # Print the actual error to console for debugging
+            print(f"Database error details: {err}")
+
+    # Initial load
+    load_assignments()  
+              
 # Student Submit Tab
 def setup_submit_tab(tab, student_id):
     # Assignment selection
