@@ -319,7 +319,7 @@ def open_dashboard(role, user_id):
 # HOD Tab: Assign courses to faculty
 def setup_hod_tab(tab, dashboard_window):
     # Add logout button at the top
-    logout_btn = tk.Button(tab, text="Logout", command=lambda: logout(dashboard_window))
+    logout_btn = tk.Button(tab, text="Logout",bg='#ff6b6b', fg='white', command=lambda: logout(dashboard_window))
     logout_btn.pack(anchor='ne', padx=10, pady=5)
     
     # Faculty selection
@@ -1098,7 +1098,7 @@ def setup_grading_tab(tab, faculty_id):
 
     # Initial data load
     load_data()
-    
+
 def submit_grade(assignment_cb, grade_entry):
     assignment_selection = assignment_cb.get()
     grade = grade_entry.get().upper()
