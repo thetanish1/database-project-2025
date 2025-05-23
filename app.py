@@ -258,42 +258,62 @@ def login():
 def open_dashboard(role, user_id):
     dashboard = tk.Tk()
     dashboard.title(f"Department Management System - {role} Dashboard")
-    dashboard.geometry("800x600")
+    dashboard.geometry("1000x700")
 
     # Create tab control
     tab_control = ttk.Notebook(dashboard)
 
     if role == "HOD":
+        # Create tabs
         hod_tab = ttk.Frame(tab_control)
         report_tab = ttk.Frame(tab_control)
         
+        # Add tabs to notebook
         tab_control.add(hod_tab, text="Faculty Assignments")
         tab_control.add(report_tab, text="Reports")
         
-        setup_hod_tab(hod_tab, dashboard)  # Pass dashboard window
+        # Setup tabs
+        setup_hod_tab(hod_tab, dashboard)
         setup_hod_report_tab(report_tab)
-        
+
     elif role == "Faculty":
+        # Create tabs
         faculty_tab = ttk.Frame(tab_control)
         grading_tab = ttk.Frame(tab_control)
         
+        # Add tabs to notebook
         tab_control.add(faculty_tab, text="Student Assignments")
         tab_control.add(grading_tab, text="Grade Assignments")
         
-        setup_faculty_tab(faculty_tab, user_id)
+        # Setup tabs with dashboard window reference
+        setup_faculty_tab(faculty_tab, dashboard, user_id)
         setup_grading_tab(grading_tab, user_id)
-        
+
     elif role == "Student":
+        # Create tabs
         student_tab = ttk.Frame(tab_control)
         submit_tab = ttk.Frame(tab_control)
         
+        # Add tabs to notebook
         tab_control.add(student_tab, text="My Assignments")
         tab_control.add(submit_tab, text="Submit Work")
         
+        # Setup tabs
         setup_student_tab(student_tab, user_id)
         setup_submit_tab(submit_tab, user_id)
 
-    tab_control.pack(expand=1, fill="both")
+    # Pack the notebook
+    tab_control.pack(expand=True, fill='both', padx=10, pady=10)
+    
+    # Center the window on screen
+    window_width = 1000
+    window_height = 700
+    screen_width = dashboard.winfo_screenwidth()
+    screen_height = dashboard.winfo_screenheight()
+    x = (screen_width // 2) - (window_width // 2)
+    y = (screen_height // 2) - (window_height // 2)
+    dashboard.geometry(f"{window_width}x{window_height}+{x}+{y}")
+    
     dashboard.mainloop()
 
 # HOD Tab: Assign courses to faculty
@@ -608,91 +628,214 @@ def generate_department_report(dept_cb, tree):
         messagebox.showerror("Database Error", f"Error generating report: {err}")
 
 # Faculty Tab: Assign work to students
-def setup_faculty_tab(tab, faculty_id):
-    # Student selection
-    tk.Label(tab, text="Select Student:").pack(pady=5)
-    student_combobox = ttk.Combobox(tab, state="readonly")
+def setup_faculty_tab(tab, dashboard_window, faculty_id):
+    # Add logout button
+    logout_btn = tk.Button(tab, text="Logout", bg='#ff6b6b', fg='white',
+                         command=lambda: logout(dashboard_window))
+    logout_btn.pack(anchor='ne', padx=10, pady=5)
+
+    # Main container frame
+    main_frame = ttk.Frame(tab)
+    main_frame.pack(fill='both', expand=True, padx=10, pady=10)
+
+    # Left frame for assignment creation
+    left_frame = ttk.Frame(main_frame)
+    left_frame.pack(side='left', fill='both', expand=True, padx=5, pady=5)
+
+    # Right frame for assignment management
+    right_frame = ttk.Frame(main_frame)
+    right_frame.pack(side='right', fill='both', expand=True, padx=5, pady=5)
+
+    # Assignment Creation Section
+    ttk.Label(left_frame, text="Create New Assignment", font=('Arial', 12, 'bold')).pack(pady=5)
+    
+    # Student selection with numbering
+    ttk.Label(left_frame, text="Select Student:").pack(pady=5)
+    student_combobox = ttk.Combobox(left_frame, state="readonly", width=30)
     student_combobox.pack(pady=5)
-    
+
     # Course selection
-    tk.Label(tab, text="Select Course:").pack(pady=5)
-    course_combobox = ttk.Combobox(tab, state="readonly")
+    ttk.Label(left_frame, text="Select Course:").pack(pady=5)
+    course_combobox = ttk.Combobox(left_frame, state="readonly", width=30)
     course_combobox.pack(pady=5)
-    
+
     # Assignment details
-    tk.Label(tab, text="Assignment Title:").pack(pady=5)
-    title_entry = tk.Entry(tab)
+    ttk.Label(left_frame, text="Assignment Title:").pack(pady=5)
+    title_entry = ttk.Entry(left_frame, width=30)
     title_entry.pack(pady=5)
-    
-    tk.Label(tab, text="Description:").pack(pady=5)
-    desc_text = tk.Text(tab, height=5, width=50)
+
+    ttk.Label(left_frame, text="Description:").pack(pady=5)
+    desc_text = tk.Text(left_frame, height=5, width=30)
     desc_text.pack(pady=5)
-    
-    tk.Label(tab, text="Submission Date (YYYY-MM-DD):").pack(pady=5)
-    sub_date_entry = tk.Entry(tab)
+
+    ttk.Label(left_frame, text="Submission Date (YYYY-MM-DD):").pack(pady=5)
+    sub_date_entry = ttk.Entry(left_frame, width=30)
     sub_date_entry.pack(pady=5)
+
+    # Assignment Management Section
+    ttk.Label(right_frame, text="Manage Assignments", font=('Arial', 12, 'bold')).pack(pady=5)
     
-    # Load data
-    try:
-        conn = db_connection()
-        cursor = conn.cursor()
-        
-        # Get students
-        cursor.execute("SELECT student_id, name FROM students")
-        student_list = [(row[0], row[1]) for row in cursor.fetchall()]
-        student_combobox['values'] = [f"{sid} - {name}" for sid, name in student_list]
-        
-        # Get courses assigned to this faculty
-        cursor.execute("""
-        SELECT c.course_id, c.course_code, c.course_name 
-        FROM faculty_assignments fa
-        JOIN courses c ON fa.course_id = c.course_id
-        WHERE fa.faculty_id = %s
-        """, (faculty_id,))
-        course_list = [(row[0], f"{row[1]} - {row[2]}") for row in cursor.fetchall()]
-        course_combobox['values'] = [name for _, name in course_list]
-        
-        cursor.close()
-        conn.close()
-    except mysql.connector.Error as err:
-        messagebox.showerror("Database Error", f"Error loading data: {err}")
-    
-    # Assign button
-    assign_btn = tk.Button(tab, text="Create Assignment", 
+    # Assignment selection for removal
+    ttk.Label(right_frame, text="Select Assignment to Remove:").pack(pady=5)
+    remove_assignment_combobox = ttk.Combobox(right_frame, state="readonly", width=30)
+    remove_assignment_combobox.pack(pady=5)
+
+    # Button frame
+    button_frame = ttk.Frame(left_frame)
+    button_frame.pack(pady=10)
+
+    # Create assignment button
+    create_btn = ttk.Button(button_frame, text="Create Assignment",
                           command=lambda: create_student_assignment(
                               faculty_id, student_combobox, course_combobox,
-                              title_entry, desc_text, sub_date_entry
-                          ))
-    assign_btn.pack(pady=10)
-    
+                              title_entry, desc_text, sub_date_entry, load_data))
+    create_btn.grid(row=0, column=0, padx=5)
+
+    # Remove assignment button
+    remove_btn = ttk.Button(right_frame, text="Remove Assignment",
+                          command=lambda: remove_student_assignment(
+                              remove_assignment_combobox, load_data))
+    remove_btn.pack(pady=10)
+
     # Display current assignments
-    tk.Label(tab, text="Current Assignments:", font=('Arial', 10, 'bold')).pack(pady=10)
-    assignments_tree = ttk.Treeview(tab, columns=('Student', 'Course', 'Title', 'Due Date', 'Status'), show='headings')
+    ttk.Label(right_frame, text="Current Assignments:", font=('Arial', 10, 'bold')).pack(pady=10)
+    
+    # Treeview with scrollbar
+    tree_frame = ttk.Frame(right_frame)
+    tree_frame.pack(fill='both', expand=True)
+    
+    tree_scroll = ttk.Scrollbar(tree_frame)
+    tree_scroll.pack(side='right', fill='y')
+    
+    assignments_tree = ttk.Treeview(tree_frame, 
+                                  columns=('#', 'Student', 'Course', 'Title', 'Due Date', 'Status'), 
+                                  show='headings',
+                                  yscrollcommand=tree_scroll.set)
+    assignments_tree.pack(fill='both', expand=True)
+    tree_scroll.config(command=assignments_tree.yview)
+    
+    # Configure columns
+    assignments_tree.heading('#', text='#')
     assignments_tree.heading('Student', text='Student')
     assignments_tree.heading('Course', text='Course')
     assignments_tree.heading('Title', text='Title')
     assignments_tree.heading('Due Date', text='Due Date')
     assignments_tree.heading('Status', text='Status')
-    assignments_tree.pack(fill='both', expand=True)
     
+    assignments_tree.column('#', width=40, anchor='center')
+    assignments_tree.column('Student', width=120)
+    assignments_tree.column('Course', width=120)
+    assignments_tree.column('Title', width=150)
+    assignments_tree.column('Due Date', width=100, anchor='center')
+    assignments_tree.column('Status', width=80, anchor='center')
+
+    def load_data():
+        try:
+            conn = db_connection()
+            cursor = conn.cursor()
+            
+            # Get students with numbering
+            cursor.execute("SELECT student_id, name FROM students ORDER BY name")
+            students = [(row[0], row[1]) for row in cursor.fetchall()]
+            numbered_students = [f"{idx+1}. {name} (ID: {sid})" for idx, (sid, name) in enumerate(students)]
+            student_combobox['values'] = numbered_students
+            student_combobox.set('')
+            
+            # Get courses assigned to this faculty
+            cursor.execute("""
+            SELECT c.course_id, c.course_code, c.course_name 
+            FROM faculty_assignments fa
+            JOIN courses c ON fa.course_id = c.course_id
+            WHERE fa.faculty_id = %s
+            ORDER BY c.course_code
+            """, (faculty_id,))
+            course_list = [(row[0], f"{row[1]} - {row[2]}") for row in cursor.fetchall()]
+            course_combobox['values'] = [name for _, name in course_list]
+            course_combobox.set('')
+            
+            # Get current assignments for removal combobox
+            cursor.execute("""
+            SELECT a.assignment_id, s.name, c.course_code, a.title
+            FROM student_assignments a
+            JOIN students s ON a.student_id = s.student_id
+            JOIN courses c ON a.course_id = c.course_id
+            WHERE a.faculty_id = %s
+            ORDER BY s.name, a.assigned_date DESC
+            """, (faculty_id,))
+            assignments = [f"{idx+1}. {row[1]} - {row[2]} ({row[3]}) (ID: {row[0]})" 
+                         for idx, row in enumerate(cursor.fetchall())]
+            remove_assignment_combobox['values'] = assignments
+            remove_assignment_combobox.set('')
+            
+            refresh_assignments()
+            cursor.close()
+            conn.close()
+        except mysql.connector.Error as err:
+            messagebox.showerror("Database Error", f"Error loading data: {err}")
+
+    def refresh_assignments():
+        try:
+            # Clear existing data
+            for item in assignments_tree.get_children():
+                assignments_tree.delete(item)
+            
+            conn = db_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+            SELECT ROW_NUMBER() OVER (ORDER BY s.name, a.submission_date) as row_num,
+                   s.name, c.course_name, a.title, 
+                   DATE_FORMAT(a.submission_date, '%Y-%m-%d'), 
+                   a.status
+            FROM student_assignments a
+            JOIN students s ON a.student_id = s.student_id
+            JOIN courses c ON a.course_id = c.course_id
+            WHERE a.faculty_id = %s
+            """, (faculty_id,))
+            
+            # Insert data with alternating colors
+            for i, row in enumerate(cursor.fetchall()):
+                tag = 'evenrow' if i % 2 == 0 else 'oddrow'
+                assignments_tree.insert('', 'end', values=row, tags=(tag,))
+            
+            # Configure tags for alternating colors
+            assignments_tree.tag_configure('evenrow', background='#f5f5f5')
+            assignments_tree.tag_configure('oddrow', background='white')
+            
+            cursor.close()
+            conn.close()
+        except mysql.connector.Error as err:
+            messagebox.showerror("Database Error", f"Error loading assignments: {err}")
+
+    # Initial data load
+    load_data()
+    
+def remove_student_assignment(assignment_cb, callback):
     try:
+        assignment_selection = assignment_cb.get()
+        if not assignment_selection:
+            raise ValueError("Please select an assignment to remove")
+        
+        # Extract assignment ID
+        assignment_id = int(assignment_selection.split("ID: ")[1].rstrip(")"))
+        
+        # Confirm deletion
+        if not messagebox.askyesno("Confirm", "Are you sure you want to remove this assignment?"):
+            return
+        
         conn = db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-        SELECT s.name, c.course_name, a.title, a.submission_date, a.status
-        FROM student_assignments a
-        JOIN students s ON a.student_id = s.student_id
-        JOIN courses c ON a.course_id = c.course_id
-        WHERE a.faculty_id = %s
-        """, (faculty_id,))
-        
-        for row in cursor.fetchall():
-            assignments_tree.insert('', 'end', values=row)
-        
-        cursor.close()
-        conn.close()
+        if conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM student_assignments WHERE assignment_id = %s", (assignment_id,))
+            conn.commit()
+            messagebox.showinfo("Success", "Assignment removed successfully!")
+            callback()  # Refresh all data
+            cursor.close()
+            conn.close()
+    except ValueError as ve:
+        messagebox.showerror("Input Error", str(ve))
     except mysql.connector.Error as err:
-        messagebox.showerror("Database Error", f"Error loading assignments: {err}")
+        messagebox.showerror("Database Error", f"Error removing assignment: {err}")
+        
 
 def setup_student_tab(tab, student_id):
     # Display assignments
@@ -931,14 +1074,24 @@ def create_student_assignment(faculty_id, student_cb, course_cb, title_entry, de
         except ValueError:
             raise ValueError("Date must be in YYYY-MM-DD format")
         
-        # Get IDs
+        # Get student ID
         student_id = int(student_selection.split(" - ")[0])
-        course_id = int(course_selection.split(" - ")[0])
         
-        # Call stored procedure to create assignment
+        # Get course ID (not by converting course code to int)
+        course_code = course_selection.split(" - ")[0]  # Get "CS302" part
+        
         conn = db_connection()
         if conn:
             cursor = conn.cursor()
+            
+            # First find the course ID for this course code
+            cursor.execute("SELECT course_id FROM courses WHERE course_code = %s", (course_code,))
+            result = cursor.fetchone()
+            if not result:
+                raise ValueError("Selected course not found in database")
+            course_id = result[0]
+            
+            # Call stored procedure to create assignment
             cursor.callproc("assign_student_work", 
                           (title, description, faculty_id, student_id, course_id, sub_date))
             conn.commit()
@@ -950,7 +1103,11 @@ def create_student_assignment(faculty_id, student_cb, course_cb, title_entry, de
             sub_date_entry.delete(0, tk.END)
             
             # Refresh assignments treeview
-            assignments_tree = student_cb.master.winfo_children()[-1]  # Get the treeview widget
+            for widget in student_cb.master.winfo_children():
+                if isinstance(widget, ttk.Treeview):
+                    assignments_tree = widget
+                    break
+            
             for item in assignments_tree.get_children():
                 assignments_tree.delete(item)
                 
@@ -972,9 +1129,6 @@ def create_student_assignment(faculty_id, student_cb, course_cb, title_entry, de
         messagebox.showerror("Input Error", str(ve))
     except mysql.connector.Error as err:
         messagebox.showerror("Database Error", f"Error creating assignment: {err}")
-    except Exception as e:
-        messagebox.showerror("Error", f"An unexpected error occurred: {str(e)}")
-
 
 # Main application
 if __name__ == "__main__":
@@ -985,7 +1139,7 @@ if __name__ == "__main__":
     # Login Screen UI
     root = tk.Tk()
     root.title("Department Management System - Login")
-    root.geometry("400x300")
+    root.geometry("800x600")
     
     # Center the window
     window_width = 400
