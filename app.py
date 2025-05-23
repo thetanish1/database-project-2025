@@ -394,7 +394,7 @@ def setup_hod_tab(tab, dashboard_window):
     # Display current assignments
     tk.Label(tab, text="Current Assignments:", font=('Arial', 10, 'bold')).pack(pady=10)
     assignments_tree = ttk.Treeview(tab, columns=('#', 'Faculty', 'Course', 'Assigned Date'), show='headings')
-    assignments_tree.heading('#', text='#')
+    assignments_tree.heading('Inde', text='Index')
     assignments_tree.heading('Faculty', text='Faculty')
     assignments_tree.heading('Course', text='Course')
     assignments_tree.heading('Assigned Date', text='Assigned Date')
@@ -1137,7 +1137,8 @@ def setup_student_tab(tab, student_id):
     # Display assignments
     tk.Label(tab, text="Your Assignments:", font=('Arial', 10, 'bold')).pack(pady=10)
     
-    assignments_tree = ttk.Treeview(tab, columns=('Course', 'Title', 'Due Date', 'Status', 'Grade'), show='headings')
+    assignments_tree = ttk.Treeview(tab, columns=('#', 'Course', 'Title', 'Due Date', 'Status', 'Grade'), show='headings')
+    assignments_tree.heading('#', text='#')
     assignments_tree.heading('Course', text='Course')
     assignments_tree.heading('Title', text='Title')
     assignments_tree.heading('Due Date', text='Due Date')
@@ -1149,9 +1150,15 @@ def setup_student_tab(tab, student_id):
         conn = db_connection()
         cursor = conn.cursor()
         
-        # Fixed query using proper column name
+        # Use the student_id column from the view
         cursor.execute("""
-        SELECT course_name, title, submission_date, status, grade
+        SELECT 
+            ROW_NUMBER() OVER (ORDER BY submission_date) as row_num,
+            course_name, 
+            title, 
+            submission_date, 
+            status, 
+            grade
         FROM student_assignment_view
         WHERE student_id = %s
         """, (student_id,))
@@ -1163,7 +1170,7 @@ def setup_student_tab(tab, student_id):
         conn.close()
     except mysql.connector.Error as err:
         messagebox.showerror("Database Error", f"Error loading assignments: {err}")
-
+        
 # Student Submit Tab
 def setup_submit_tab(tab, student_id):
     # Assignment selection
