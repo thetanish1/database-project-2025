@@ -1134,57 +1134,84 @@ def submit_grade(assignment_cb, grade_entry):
 
 # Student Tab: View assignments
 def setup_student_tab(tab, student_id):
-    # Display assignments
-    tk.Label(tab, text="Your Assignments:", font=('Arial', 10, 'bold')).pack(pady=10)
-    
-    assignments_tree = ttk.Treeview(tab, 
-                                 columns=('#', 'Course', 'Title', 'Due Date', 'Status', 'Grade'), 
-                                 show='headings')
-    assignments_tree.heading('#', text='#')
-    assignments_tree.heading('Course', text='Course')
-    assignments_tree.heading('Title', text='Title')
-    assignments_tree.heading('Due Date', text='Due Date')
-    assignments_tree.heading('Status', text='Status')
-    assignments_tree.heading('Grade', text='Grade')
+    # Main container frame
+    main_frame = ttk.Frame(tab)
+    main_frame.pack(fill='both', expand=True, padx=10, pady=10)
+
+    # Title label
+    title_label = ttk.Label(main_frame, text="Your Assignments", font=('Arial', 12, 'bold'))
+    title_label.pack(pady=10)
+
+    # Treeview with scrollbar
+    tree_frame = ttk.Frame(main_frame)
+    tree_frame.pack(fill='both', expand=True)
+
+    scrollbar = ttk.Scrollbar(tree_frame)
+    scrollbar.pack(side='right', fill='y')
+
+    assignments_tree = ttk.Treeview(tree_frame,
+                                 columns=('id', 'course', 'title', 'due_date', 'status', 'grade'),
+                                 yscrollcommand=scrollbar.set,
+                                 show='headings',
+                                 height=15)
     assignments_tree.pack(fill='both', expand=True)
-    
+    scrollbar.config(command=assignments_tree.yview)
+
+    # Configure columns
+    assignments_tree.heading('id', text='#')
+    assignments_tree.heading('course', text='Course')
+    assignments_tree.heading('title', text='Assignment')
+    assignments_tree.heading('due_date', text='Due Date')
+    assignments_tree.heading('status', text='Status')
+    assignments_tree.heading('grade', text='Grade')
+
+    assignments_tree.column('id', width=50, anchor='center')
+    assignments_tree.column('course', width=150)
+    assignments_tree.column('title', width=200)
+    assignments_tree.column('due_date', width=100, anchor='center')
+    assignments_tree.column('status', width=100, anchor='center')
+    assignments_tree.column('grade', width=80, anchor='center')
+
     def load_assignments():
         try:
             # Clear existing data
             for item in assignments_tree.get_children():
                 assignments_tree.delete(item)
-            
+
             conn = db_connection()
             cursor = conn.cursor()
-            
-            # Simplified query that doesn't depend on course_code
+
+            # Get assignments for this specific student
             cursor.execute("""
             SELECT 
-                ROW_NUMBER() OVER (ORDER BY a.submission_date) as row_num,
-                c.course_name as course,
+                a.assignment_id,
+                CONCAT(c.course_code, ' - ', c.course_name),
                 a.title,
                 DATE_FORMAT(a.submission_date, '%Y-%m-%d'),
                 a.status,
-                IFNULL(a.grade, 'N/A')
+                IFNULL(a.grade, '-')
             FROM student_assignments a
-            JOIN students s ON a.student_id = s.student_id
             JOIN courses c ON a.course_id = c.course_id
-            WHERE s.student_id = %s
+            WHERE a.student_id = %s
+            ORDER BY a.submission_date
             """, (student_id,))
-            
+
             # Add data to treeview
-            for row in cursor.fetchall():
-                assignments_tree.insert('', 'end', values=row)
-            
+            for i, row in enumerate(cursor.fetchall(), 1):
+                assignments_tree.insert('', 'end', values=(i,) + row[1:])
+
             cursor.close()
             conn.close()
+
         except mysql.connector.Error as err:
-            messagebox.showerror("Database Error", f"Error loading assignments: {err}")
-            # Print the actual error to console for debugging
-            print(f"Database error details: {err}")
+            messagebox.showerror("Database Error", f"Failed to load assignments: {err}")
 
     # Initial load
-    load_assignments()  
+    load_assignments()
+
+    # Refresh button
+    refresh_btn = ttk.Button(main_frame, text="Refresh", command=load_assignments)
+    refresh_btn.pack(pady=10) 
               
 # Student Submit Tab
 def setup_submit_tab(tab, student_id):
