@@ -377,17 +377,17 @@ def setup_hod_tab(tab, dashboard_window):
     button_frame.pack(pady=10)
     
     # Assign button
-    assign_btn = tk.Button(button_frame, text="Assign Course", 
+    assign_btn = tk.Button(button_frame, text="Assign Course", bg="#58a9ec", fg='white', 
                          command=lambda: assign_course_to_faculty(faculty_combobox, course_combobox, load_data))
     assign_btn.grid(row=0, column=0, padx=5)
     
     # Update button
-    update_btn = tk.Button(button_frame, text="Update Assignment", 
+    update_btn = tk.Button(button_frame, text="Update Assignment", bg="#58a9ec", fg='white', 
                          command=lambda: update_assignment(assignment_combobox, faculty_combobox, course_combobox, load_data))
     update_btn.grid(row=0, column=1, padx=5)
     
     # Remove button
-    remove_btn = tk.Button(button_frame, text="Remove Assignment", 
+    remove_btn = tk.Button(button_frame, text="Remove Assignment", bg="#58a9ec", fg='white', 
                          command=lambda: remove_assignment(assignment_combobox, load_data))
     remove_btn.grid(row=0, column=2, padx=5)
     
