@@ -257,23 +257,20 @@ def login():
 # Open dashboard based on role
 def open_dashboard(role, user_id):
     dashboard = tk.Tk()
-    dashboard.title(f"{role} Dashboard")
+    dashboard.title(f"Department Management System - {role} Dashboard")
     dashboard.geometry("800x600")
 
-    # Create tab control first
+    # Create tab control
     tab_control = ttk.Notebook(dashboard)
 
     if role == "HOD":
-        # Create frames for each tab first
         hod_tab = ttk.Frame(tab_control)
         report_tab = ttk.Frame(tab_control)
         
-        # Add tabs to the notebook
         tab_control.add(hod_tab, text="Faculty Assignments")
         tab_control.add(report_tab, text="Reports")
         
-        # Now set up the tabs
-        setup_hod_tab(hod_tab, dashboard)
+        setup_hod_tab(hod_tab, dashboard)  # Pass dashboard window
         setup_hod_report_tab(report_tab)
         
     elif role == "Faculty":
@@ -296,10 +293,9 @@ def open_dashboard(role, user_id):
         setup_student_tab(student_tab, user_id)
         setup_submit_tab(submit_tab, user_id)
 
-    # Pack the tab control after all tabs are added
-    tab_control.pack(expand=True, fill="both")
+    tab_control.pack(expand=1, fill="both")
     dashboard.mainloop()
-    
+
 # HOD Tab: Assign courses to faculty
 def setup_hod_tab(tab, dashboard_window):
     # Add logout button at the top
@@ -489,13 +485,72 @@ def remove_assignment(assignment_cb, callback):
     except mysql.connector.Error as err:
         messagebox.showerror("Database Error", f"Error removing assignment: {err}")
 
-def logout(window):
-    window.destroy()
-    # Recreate login window
-    root = tk.Tk()
-    root.title("Department Management System - Login")
-    # ... (rest of your login window code)
-    root.mainloop()# HOD Report Tab
+def logout(dashboard_window):
+    dashboard_window.destroy()
+    show_login_window()
+
+def show_login_window():
+    # Login Screen UI
+    login_window = tk.Tk()
+    login_window.title("Department Management System - Login")
+    login_window.geometry("400x300")
+    
+    # Center the window
+    window_width = 400
+    window_height = 300
+    screen_width = login_window.winfo_screenwidth()
+    screen_height = login_window.winfo_screenheight()
+    x = (screen_width // 2) - (window_width // 2)
+    y = (screen_height // 2) - (window_height // 2)
+    login_window.geometry(f"{window_width}x{window_height}+{x}+{y}")
+    
+    # Login frame
+    login_frame = tk.Frame(login_window, padx=20, pady=20)
+    login_frame.pack(expand=True)
+    
+    # Username and Password Entry
+    tk.Label(login_frame, text="Username").pack()
+    entry_username = tk.Entry(login_frame)
+    entry_username.pack(pady=5)
+    
+    tk.Label(login_frame, text="Password").pack()
+    entry_password = tk.Entry(login_frame, show="*")
+    entry_password.pack(pady=5)
+    
+    # Login Button
+    login_button = tk.Button(login_frame, text="Login", command=lambda: login(entry_username, entry_password, login_window))
+    login_button.pack(pady=20)
+    
+    login_window.mainloop()
+
+def login(entry_username, entry_password, login_window):
+    username = entry_username.get()
+    password = entry_password.get()
+
+    if not username or not password:
+        messagebox.showerror("Error", "Username and password are required!")
+        return
+
+    try:
+        connection = db_connection()
+        if connection:
+            cursor = connection.cursor(dictionary=True)
+            cursor.execute(
+                "SELECT * FROM users WHERE username=%s AND password=%s",
+                (username, password)
+            )
+            user = cursor.fetchone()
+            
+            if user:
+                messagebox.showinfo("Login Success", "Login Successful!")
+                login_window.destroy()  # Close login window
+                open_dashboard(user['role'], user['associated_id'])
+            else:
+                messagebox.showerror("Login Failed", "Invalid credentials!")
+            cursor.close()
+            connection.close()
+    except mysql.connector.Error as err:
+        messagebox.showerror("Database Error", f"Error during login: {err}")
 
 def setup_hod_report_tab(tab):
     # Department selection
@@ -925,6 +980,7 @@ def create_student_assignment(faculty_id, student_cb, course_cb, title_entry, de
 if __name__ == "__main__":
     # Initialize database
     initialize_database()
+    show_login_window()
     
     # Login Screen UI
     root = tk.Tk()
