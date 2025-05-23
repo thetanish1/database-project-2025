@@ -2,6 +2,8 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 import mysql.connector
 from datetime import datetime
+from tkinter import simpledialog
+
 
 # Database connection function with error handling
 def db_connection():
@@ -258,41 +260,52 @@ def open_dashboard(role, user_id):
     dashboard.title(f"{role} Dashboard")
     dashboard.geometry("800x600")
 
-    # Tabs for different roles
+    # Create tab control first
     tab_control = ttk.Notebook(dashboard)
 
     if role == "HOD":
+        # Create frames for each tab first
         hod_tab = ttk.Frame(tab_control)
-        tab_control.add(hod_tab, text="Faculty Assignments")
-        setup_hod_tab(hod_tab)
-        
         report_tab = ttk.Frame(tab_control)
+        
+        # Add tabs to the notebook
+        tab_control.add(hod_tab, text="Faculty Assignments")
         tab_control.add(report_tab, text="Reports")
+        
+        # Now set up the tabs
+        setup_hod_tab(hod_tab, dashboard)
         setup_hod_report_tab(report_tab)
         
     elif role == "Faculty":
         faculty_tab = ttk.Frame(tab_control)
-        tab_control.add(faculty_tab, text="Student Assignments")
-        setup_faculty_tab(faculty_tab, user_id)
-        
         grading_tab = ttk.Frame(tab_control)
+        
+        tab_control.add(faculty_tab, text="Student Assignments")
         tab_control.add(grading_tab, text="Grade Assignments")
+        
+        setup_faculty_tab(faculty_tab, user_id)
         setup_grading_tab(grading_tab, user_id)
         
     elif role == "Student":
         student_tab = ttk.Frame(tab_control)
-        tab_control.add(student_tab, text="My Assignments")
-        setup_student_tab(student_tab, user_id)
-        
         submit_tab = ttk.Frame(tab_control)
+        
+        tab_control.add(student_tab, text="My Assignments")
         tab_control.add(submit_tab, text="Submit Work")
+        
+        setup_student_tab(student_tab, user_id)
         setup_submit_tab(submit_tab, user_id)
 
-    tab_control.pack(expand=1, fill="both")
+    # Pack the tab control after all tabs are added
+    tab_control.pack(expand=True, fill="both")
     dashboard.mainloop()
-
+    
 # HOD Tab: Assign courses to faculty
-def setup_hod_tab(tab):
+def setup_hod_tab(tab, dashboard_window):
+    # Add logout button at the top
+    logout_btn = tk.Button(tab, text="Logout", command=lambda: logout(dashboard_window))
+    logout_btn.pack(anchor='ne', padx=10, pady=5)
+    
     # Faculty selection
     tk.Label(tab, text="Select Faculty:").pack(pady=5)
     faculty_combobox = ttk.Combobox(tab, state="readonly")
@@ -303,52 +316,102 @@ def setup_hod_tab(tab):
     course_combobox = ttk.Combobox(tab, state="readonly")
     course_combobox.pack(pady=5)
     
-    # Load data
-    try:
-        conn = db_connection()
-        cursor = conn.cursor()
-        
-        # Get faculty
-        cursor.execute("SELECT faculty_id, name FROM faculty")
-        faculty_list = [(row[0], row[1]) for row in cursor.fetchall()]
-        faculty_combobox['values'] = [f"{fid} - {name}" for fid, name in faculty_list]
-        
-        # Get courses
-        cursor.execute("SELECT course_id, course_code, course_name FROM courses")
-        course_list = [(row[0], f"{row[1]} - {row[2]}") for row in cursor.fetchall()]
-        course_combobox['values'] = [name for _, name in course_list]
-        
-        cursor.close()
-        conn.close()
-    except mysql.connector.Error as err:
-        messagebox.showerror("Database Error", f"Error loading data: {err}")
+    # Assignment selection for update/remove
+    tk.Label(tab, text="Select Assignment to Update/Remove:").pack(pady=5)
+    assignment_combobox = ttk.Combobox(tab, state="readonly")
+    assignment_combobox.pack(pady=5)
+    
+    # Load data with numbered faculty names
+    def load_data():
+        try:
+            conn = db_connection()
+            cursor = conn.cursor()
+            
+            # Get faculty with numbering
+            cursor.execute("SELECT faculty_id, name FROM faculty ORDER BY name")
+            faculty_list = [(row[0], row[1]) for row in cursor.fetchall()]
+            numbered_faculty = [f"{idx+1}. {name} (ID: {fid})" for idx, (fid, name) in enumerate(faculty_list)]
+            faculty_combobox['values'] = numbered_faculty
+            
+            # Get courses
+            cursor.execute("SELECT course_id, course_code, course_name FROM courses ORDER BY course_code")
+            course_list = [(row[0], f"{row[1]} - {row[2]}") for row in cursor.fetchall()]
+            course_combobox['values'] = [name for _, name in course_list]
+            
+            # Get current assignments for combobox
+            cursor.execute("""
+            SELECT fa.assignment_id, f.name, c.course_code 
+            FROM faculty_assignments fa
+            JOIN faculty f ON fa.faculty_id = f.faculty_id
+            JOIN courses c ON fa.course_id = c.course_id
+            ORDER BY f.name, c.course_code
+            """)
+            assignments = [f"{idx+1}. {row[1]} -> {row[2]} (ID: {row[0]})" 
+                         for idx, row in enumerate(cursor.fetchall())]
+            assignment_combobox['values'] = assignments
+            
+            cursor.close()
+            conn.close()
+            refresh_assignments()  # Refresh the treeview
+        except mysql.connector.Error as err:
+            messagebox.showerror("Database Error", f"Error loading data: {err}")
+    
+    # Button frame
+    button_frame = tk.Frame(tab)
+    button_frame.pack(pady=10)
     
     # Assign button
-    assign_btn = tk.Button(tab, text="Assign Course", 
-                          command=lambda: assign_course_to_faculty(faculty_combobox, course_combobox))
-    assign_btn.pack(pady=10)
+    assign_btn = tk.Button(button_frame, text="Assign Course", 
+                         command=lambda: assign_course_to_faculty(faculty_combobox, course_combobox, load_data))
+    assign_btn.grid(row=0, column=0, padx=5)
     
-    # Display current assignments using view
+    # Update button
+    update_btn = tk.Button(button_frame, text="Update Assignment", 
+                         command=lambda: update_assignment(assignment_combobox, faculty_combobox, course_combobox, load_data))
+    update_btn.grid(row=0, column=1, padx=5)
+    
+    # Remove button
+    remove_btn = tk.Button(button_frame, text="Remove Assignment", 
+                         command=lambda: remove_assignment(assignment_combobox, load_data))
+    remove_btn.grid(row=0, column=2, padx=5)
+    
+    # Display current assignments
     tk.Label(tab, text="Current Assignments:", font=('Arial', 10, 'bold')).pack(pady=10)
-    assignments_tree = ttk.Treeview(tab, columns=('Faculty', 'Course', 'Assigned Date'), show='headings')
+    assignments_tree = ttk.Treeview(tab, columns=('#', 'Faculty', 'Course', 'Assigned Date'), show='headings')
+    assignments_tree.heading('#', text='#')
     assignments_tree.heading('Faculty', text='Faculty')
     assignments_tree.heading('Course', text='Course')
     assignments_tree.heading('Assigned Date', text='Assigned Date')
+    assignments_tree.column('#', width=50, anchor='center')
     assignments_tree.pack(fill='both', expand=True)
     
-    try:
-        conn = db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM faculty_course_view")
-        for row in cursor.fetchall():
-            assignments_tree.insert('', 'end', values=(row[0], row[1], row[3]))
-        cursor.close()
-        conn.close()
-    except mysql.connector.Error as err:
-        messagebox.showerror("Database Error", f"Error loading assignments: {err}")
+    def refresh_assignments():
+        try:
+            for item in assignments_tree.get_children():
+                assignments_tree.delete(item)
+            
+            conn = db_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+            SELECT ROW_NUMBER() OVER (ORDER BY f.name, c.course_code) as row_num,
+                   f.name, c.course_name, fa.assigned_date
+            FROM faculty_assignments fa
+            JOIN faculty f ON fa.faculty_id = f.faculty_id
+            JOIN courses c ON fa.course_id = c.course_id
+            """)
+            
+            for idx, row in enumerate(cursor.fetchall()):
+                assignments_tree.insert('', 'end', values=(row[0], row[1], row[2], row[3]))
+            
+            cursor.close()
+            conn.close()
+        except mysql.connector.Error as err:
+            messagebox.showerror("Database Error", f"Error loading assignments: {err}")
+    
+    # Initial load
+    load_data()
 
-# Improved version with validation
-def assign_course_to_faculty(faculty_cb, course_cb):
+def assign_course_to_faculty(faculty_cb, course_cb, callback):
     try:
         faculty_selection = faculty_cb.get()
         course_selection = course_cb.get()
@@ -356,23 +419,84 @@ def assign_course_to_faculty(faculty_cb, course_cb):
         if not faculty_selection or not course_selection:
             raise ValueError("Please select both faculty and course")
         
-        # Get IDs safely
-        faculty_parts = faculty_selection.split(" - ")
-        course_parts = course_selection.split(" - ")
+        # Extract faculty ID from the numbered string
+        faculty_id = int(faculty_selection.split("ID: ")[1].rstrip(")"))
         
-        if len(faculty_parts) < 1 or len(course_parts) < 1:
-            raise ValueError("Invalid selection format")
+        # Get course ID
+        course_code = course_selection.split(" - ")[0]
+        
+        conn = db_connection()
+        if conn:
+            cursor = conn.cursor()
             
-        faculty_id = int(faculty_parts[0])
-        course_id = int(course_parts[0])
-        
-        # Rest of the database code...
-        
+            # Find course ID
+            cursor.execute("SELECT course_id FROM courses WHERE course_code = %s", (course_code,))
+            result = cursor.fetchone()
+            if not result:
+                raise ValueError("Selected course not found in database")
+            course_id = result[0]
+            
+            # Check for existing assignment
+            cursor.execute("""
+            SELECT COUNT(*) FROM faculty_assignments 
+            WHERE faculty_id = %s AND course_id = %s
+            """, (faculty_id, course_id))
+            if cursor.fetchone()[0] > 0:
+                raise ValueError("This faculty is already assigned to this course")
+            
+            # Assign course
+            cursor.callproc("assign_faculty_to_course", (faculty_id, course_id))
+            conn.commit()
+            messagebox.showinfo("Success", "Course assigned successfully!")
+            
+            cursor.close()
+            conn.close()
+            callback()  # Refresh all data
+            
     except ValueError as ve:
         messagebox.showerror("Input Error", str(ve))
-    except Exception as e:
-        messagebox.showerror("Error", f"An unexpected error occurred: {str(e)}")
-# HOD Report Tab
+    except mysql.connector.Error as err:
+        messagebox.showerror("Database Error", f"Error assigning course: {err}")
+
+def remove_assignment(assignment_cb, callback):
+    try:
+        assignment_selection = assignment_cb.get()
+        if not assignment_selection:
+            raise ValueError("Please select an assignment to remove")
+        
+        # Extract assignment ID from the numbered string
+        assignment_id = int(assignment_selection.split("ID: ")[1].rstrip(")"))
+        
+        # Confirm deletion
+        if not messagebox.askyesno("Confirm", "Are you sure you want to remove this assignment?"):
+            return
+        
+        conn = db_connection()
+        if conn:
+            cursor = conn.cursor()
+            
+            # Delete assignment
+            cursor.execute("DELETE FROM faculty_assignments WHERE assignment_id = %s", (assignment_id,))
+            conn.commit()
+            messagebox.showinfo("Success", "Assignment removed successfully!")
+            
+            cursor.close()
+            conn.close()
+            callback()  # Refresh all data
+            
+    except ValueError as ve:
+        messagebox.showerror("Input Error", str(ve))
+    except mysql.connector.Error as err:
+        messagebox.showerror("Database Error", f"Error removing assignment: {err}")
+
+def logout(window):
+    window.destroy()
+    # Recreate login window
+    root = tk.Tk()
+    root.title("Department Management System - Login")
+    # ... (rest of your login window code)
+    root.mainloop()# HOD Report Tab
+
 def setup_hod_report_tab(tab):
     # Department selection
     tk.Label(tab, text="Select Department:").pack(pady=5)
@@ -547,6 +671,7 @@ def setup_student_tab(tab, student_id):
         messagebox.showerror("Database Error", f"Error loading assignments: {err}")
 
 # Faculty Grading Tab
+
 def setup_grading_tab(tab, faculty_id):
     # Assignment selection
     tk.Label(tab, text="Select Assignment to Grade:").pack(pady=5)
@@ -733,6 +858,68 @@ def submit_assignment(assignment_cb):
         conn.close()
     except mysql.connector.Error as err:
         messagebox.showerror("Database Error", f"Error submitting assignment: {err}")
+
+def create_student_assignment(faculty_id, student_cb, course_cb, title_entry, desc_text, sub_date_entry):
+    try:
+        student_selection = student_cb.get()
+        course_selection = course_cb.get()
+        title = title_entry.get()
+        description = desc_text.get("1.0", tk.END).strip()
+        sub_date = sub_date_entry.get()
+        
+        if not all([student_selection, course_selection, title, description, sub_date]):
+            raise ValueError("All fields are required!")
+        
+        # Validate date format
+        try:
+            datetime.strptime(sub_date, "%Y-%m-%d")
+        except ValueError:
+            raise ValueError("Date must be in YYYY-MM-DD format")
+        
+        # Get IDs
+        student_id = int(student_selection.split(" - ")[0])
+        course_id = int(course_selection.split(" - ")[0])
+        
+        # Call stored procedure to create assignment
+        conn = db_connection()
+        if conn:
+            cursor = conn.cursor()
+            cursor.callproc("assign_student_work", 
+                          (title, description, faculty_id, student_id, course_id, sub_date))
+            conn.commit()
+            messagebox.showinfo("Success", "Assignment created successfully!")
+            
+            # Clear form
+            title_entry.delete(0, tk.END)
+            desc_text.delete("1.0", tk.END)
+            sub_date_entry.delete(0, tk.END)
+            
+            # Refresh assignments treeview
+            assignments_tree = student_cb.master.winfo_children()[-1]  # Get the treeview widget
+            for item in assignments_tree.get_children():
+                assignments_tree.delete(item)
+                
+            cursor.execute("""
+            SELECT s.name, c.course_name, a.title, a.submission_date, a.status
+            FROM student_assignments a
+            JOIN students s ON a.student_id = s.student_id
+            JOIN courses c ON a.course_id = c.course_id
+            WHERE a.faculty_id = %s
+            """, (faculty_id,))
+            
+            for row in cursor.fetchall():
+                assignments_tree.insert('', 'end', values=row)
+            
+            cursor.close()
+            conn.close()
+        
+    except ValueError as ve:
+        messagebox.showerror("Input Error", str(ve))
+    except mysql.connector.Error as err:
+        messagebox.showerror("Database Error", f"Error creating assignment: {err}")
+    except Exception as e:
+        messagebox.showerror("Error", f"An unexpected error occurred: {str(e)}")
+
 
 # Main application
 if __name__ == "__main__":
