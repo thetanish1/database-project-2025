@@ -684,7 +684,7 @@ def setup_faculty_tab(tab, dashboard_window, faculty_id):
     button_frame = ttk.Frame(left_frame)
     button_frame.pack(pady=10)
 
-    # Create assignment button
+    # Create assignment button - FIXED VERSION
     create_btn = ttk.Button(button_frame, text="Create Assignment",
                           command=lambda: create_student_assignment(
                               faculty_id, student_combobox, course_combobox,
@@ -1030,32 +1030,61 @@ def setup_submit_tab(tab, student_id):
                           command=lambda: submit_assignment(assignment_combobox))
     submit_btn.pack(pady=10)
 
-def submit_assignment(assignment_cb):
-    assignment_selection = assignment_cb.get()
-    if not assignment_selection:
-        messagebox.showerror("Error", "Please select an assignment")
-        return
-    
-    assignment_id = assignment_selection.split(" - ")[0]
-    
+def create_student_assignment(faculty_id, student_cb, course_cb, title_entry, desc_text, sub_date_entry, callback):
     try:
+        student_selection = student_cb.get()
+        course_selection = course_cb.get()
+        title = title_entry.get()
+        description = desc_text.get("1.0", tk.END).strip()
+        sub_date = sub_date_entry.get()
+        
+        if not all([student_selection, course_selection, title, description, sub_date]):
+            raise ValueError("All fields are required!")
+        
+        # Validate date format
+        try:
+            datetime.strptime(sub_date, "%Y-%m-%d")
+        except ValueError:
+            raise ValueError("Date must be in YYYY-MM-DD format")
+        
+        # Get student ID
+        student_id = int(student_selection.split("ID: ")[1].rstrip(")"))
+        
+        # Get course ID
+        course_code = course_selection.split(" - ")[0]
+        
         conn = db_connection()
-        cursor = conn.cursor()
+        if conn:
+            cursor = conn.cursor()
+            
+            # Find course ID
+            cursor.execute("SELECT course_id FROM courses WHERE course_code = %s", (course_code,))
+            result = cursor.fetchone()
+            if not result:
+                raise ValueError("Selected course not found in database")
+            course_id = result[0]
+            
+            # Call stored procedure
+            cursor.callproc("assign_student_work", 
+                          (title, description, faculty_id, student_id, course_id, sub_date))
+            conn.commit()
+            messagebox.showinfo("Success", "Assignment created successfully!")
+            
+            # Clear form
+            title_entry.delete(0, tk.END)
+            desc_text.delete("1.0", tk.END)
+            sub_date_entry.delete(0, tk.END)
+            
+            # Refresh data
+            callback()
+            
+            cursor.close()
+            conn.close()
         
-        # This will trigger our before_assignment_submission trigger
-        cursor.execute("""
-        UPDATE student_assignments 
-        SET status = 'Submitted'
-        WHERE assignment_id = %s
-        """, (assignment_id,))
-        conn.commit()
-        
-        messagebox.showinfo("Success", "Assignment submitted successfully!")
-        
-        cursor.close()
-        conn.close()
+    except ValueError as ve:
+        messagebox.showerror("Input Error", str(ve))
     except mysql.connector.Error as err:
-        messagebox.showerror("Database Error", f"Error submitting assignment: {err}")
+        messagebox.showerror("Database Error", f"Error creating assignment: {err}")
 
 def create_student_assignment(faculty_id, student_cb, course_cb, title_entry, desc_text, sub_date_entry):
     try:
