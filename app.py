@@ -876,68 +876,229 @@ def setup_student_tab(tab, student_id):
 # Faculty Grading Tab
 
 def setup_grading_tab(tab, faculty_id):
-    # Assignment selection
-    tk.Label(tab, text="Select Assignment to Grade:").pack(pady=5)
-    assignment_combobox = ttk.Combobox(tab, state="readonly")
+    # Add logout button
+    logout_btn = tk.Button(tab, text="Logout", bg='#ff6b6b', fg='white',
+                         command=lambda: logout(tab.winfo_toplevel()))
+    logout_btn.pack(anchor='ne', padx=10, pady=5)
+
+    # Main container frame
+    main_frame = ttk.Frame(tab)
+    main_frame.pack(fill='both', expand=True, padx=10, pady=10)
+
+    # Left frame for grading
+    left_frame = ttk.Frame(main_frame)
+    left_frame.pack(side='left', fill='both', expand=True, padx=5, pady=5)
+
+    # Right frame for grade management
+    right_frame = ttk.Frame(main_frame)
+    right_frame.pack(side='right', fill='both', expand=True, padx=5, pady=5)
+
+    # Grading Section
+    ttk.Label(left_frame, text="Grade Assignments", font=('Arial', 12, 'bold')).pack(pady=5)
+    
+    # Assignment selection with numbering
+    ttk.Label(left_frame, text="Select Assignment to Grade:").pack(pady=5)
+    assignment_combobox = ttk.Combobox(left_frame, state="readonly", width=30)
     assignment_combobox.pack(pady=5)
-    
+
     # Grade entry
-    tk.Label(tab, text="Grade (A-F):").pack(pady=5)
-    grade_entry = tk.Entry(tab)
+    ttk.Label(left_frame, text="Grade (A-F):").pack(pady=5)
+    grade_entry = ttk.Entry(left_frame, width=30)
     grade_entry.pack(pady=5)
+
+    # Grade Management Section
+    ttk.Label(right_frame, text="Manage Grades", font=('Arial', 12, 'bold')).pack(pady=5)
     
-    # Load assignments
-    try:
-        conn = db_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute("""
-        SELECT a.assignment_id, s.name, a.title, a.status
-        FROM student_assignments a
-        JOIN students s ON a.student_id = s.student_id
-        WHERE a.faculty_id = %s AND a.status = 'Submitted'
-        """, (faculty_id,))
-        
-        assignments = [(row[0], f"{row[1]} - {row[2]} ({'Submitted' if row[3] == 'Submitted' else 'Graded'})") 
-                      for row in cursor.fetchall()]
-        assignment_combobox['values'] = [name for _, name in assignments]
-        
-        cursor.close()
-        conn.close()
-    except mysql.connector.Error as err:
-        messagebox.showerror("Database Error", f"Error loading assignments: {err}")
-    
+    # Assignment selection for grade removal
+    ttk.Label(right_frame, text="Select Assignment to Remove Grade:").pack(pady=5)
+    remove_grade_combobox = ttk.Combobox(right_frame, state="readonly", width=30)
+    remove_grade_combobox.pack(pady=5)
+
+    # Button frame
+    button_frame = ttk.Frame(left_frame)
+    button_frame.pack(pady=10)
+
     # Grade button
-    grade_btn = tk.Button(tab, text="Submit Grade", 
-                         command=lambda: submit_grade(assignment_combobox, grade_entry))
-    grade_btn.pack(pady=10)
-    
+    grade_btn = ttk.Button(button_frame, text="Submit Grade",
+                         command=lambda: submit_grade(
+                             assignment_combobox, grade_entry, load_data))
+    grade_btn.grid(row=0, column=0, padx=5)
+
+    # Remove grade button
+    remove_grade_btn = ttk.Button(right_frame, text="Remove Grade",
+                                command=lambda: remove_grade(
+                                    remove_grade_combobox, load_data))
+    remove_grade_btn.pack(pady=10)
+
     # Display graded assignments
-    tk.Label(tab, text="Graded Assignments:", font=('Arial', 10, 'bold')).pack(pady=10)
-    graded_tree = ttk.Treeview(tab, columns=('Student', 'Assignment', 'Grade'), show='headings')
+    ttk.Label(right_frame, text="Graded Assignments:", font=('Arial', 10, 'bold')).pack(pady=10)
+    
+    # Treeview with scrollbar
+    tree_frame = ttk.Frame(right_frame)
+    tree_frame.pack(fill='both', expand=True)
+    
+    tree_scroll = ttk.Scrollbar(tree_frame)
+    tree_scroll.pack(side='right', fill='y')
+    
+    graded_tree = ttk.Treeview(tree_frame, 
+                             columns=('#', 'Student', 'Course', 'Assignment', 'Grade'), 
+                             show='headings',
+                             yscrollcommand=tree_scroll.set)
+    graded_tree.pack(fill='both', expand=True)
+    tree_scroll.config(command=graded_tree.yview)
+    
+    # Configure columns
+    graded_tree.heading('#', text='#')
     graded_tree.heading('Student', text='Student')
+    graded_tree.heading('Course', text='Course')
     graded_tree.heading('Assignment', text='Assignment')
     graded_tree.heading('Grade', text='Grade')
-    graded_tree.pack(fill='both', expand=True)
     
-    try:
-        conn = db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-        SELECT s.name, a.title, a.grade
-        FROM student_assignments a
-        JOIN students s ON a.student_id = s.student_id
-        WHERE a.faculty_id = %s AND a.status = 'Graded'
-        """, (faculty_id,))
-        
-        for row in cursor.fetchall():
-            graded_tree.insert('', 'end', values=row)
-        
-        cursor.close()
-        conn.close()
-    except mysql.connector.Error as err:
-        messagebox.showerror("Database Error", f"Error loading graded assignments: {err}")
+    graded_tree.column('#', width=40, anchor='center')
+    graded_tree.column('Student', width=120)
+    graded_tree.column('Course', width=120)
+    graded_tree.column('Assignment', width=150)
+    graded_tree.column('Grade', width=60, anchor='center')
 
+    def load_data():
+        try:
+            conn = db_connection()
+            cursor = conn.cursor()
+            
+            # Get assignments ready for grading (submitted but not graded)
+            cursor.execute("""
+            SELECT a.assignment_id, s.name, c.course_name, a.title
+            FROM student_assignments a
+            JOIN students s ON a.student_id = s.student_id
+            JOIN courses c ON a.course_id = c.course_id
+            WHERE a.faculty_id = %s AND a.status = 'Submitted'
+            ORDER BY s.name, a.submission_date
+            """, (faculty_id,))
+            
+            assignments = [f"{idx+1}. {row[1]} - {row[2]} ({row[3]}) (ID: {row[0]})" 
+                         for idx, row in enumerate(cursor.fetchall())]
+            assignment_combobox['values'] = assignments
+            assignment_combobox.set('')
+            
+            # Get graded assignments for removal combobox
+            cursor.execute("""
+            SELECT a.assignment_id, s.name, c.course_name, a.title, a.grade
+            FROM student_assignments a
+            JOIN students s ON a.student_id = s.student_id
+            JOIN courses c ON a.course_id = c.course_id
+            WHERE a.faculty_id = %s AND a.status = 'Graded'
+            ORDER BY s.name, a.submission_date
+            """, (faculty_id,))
+            
+            graded_assignments = [f"{idx+1}. {row[1]} - {row[2]} ({row[3]}) - {row[4]} (ID: {row[0]})" 
+                               for idx, row in enumerate(cursor.fetchall())]
+            remove_grade_combobox['values'] = graded_assignments
+            remove_grade_combobox.set('')
+            
+            refresh_graded_assignments()
+            cursor.close()
+            conn.close()
+        except mysql.connector.Error as err:
+            messagebox.showerror("Database Error", f"Error loading data: {err}")
+
+    def refresh_graded_assignments():
+        try:
+            # Clear existing data
+            for item in graded_tree.get_children():
+                graded_tree.delete(item)
+            
+            conn = db_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+            SELECT ROW_NUMBER() OVER (ORDER BY s.name, a.submission_date) as row_num,
+                   s.name, c.course_name, a.title, a.grade
+            FROM student_assignments a
+            JOIN students s ON a.student_id = s.student_id
+            JOIN courses c ON a.course_id = c.course_id
+            WHERE a.faculty_id = %s AND a.status = 'Graded'
+            """, (faculty_id,))
+            
+            # Insert data with alternating colors
+            for i, row in enumerate(cursor.fetchall()):
+                tag = 'evenrow' if i % 2 == 0 else 'oddrow'
+                graded_tree.insert('', 'end', values=row, tags=(tag,))
+            
+            # Configure tags for alternating colors
+            graded_tree.tag_configure('evenrow', background='#f5f5f5')
+            graded_tree.tag_configure('oddrow', background='white')
+            
+            cursor.close()
+            conn.close()
+        except mysql.connector.Error as err:
+            messagebox.showerror("Database Error", f"Error loading graded assignments: {err}")
+
+    def submit_grade(assignment_cb, grade_entry, callback):
+        try:
+            assignment_selection = assignment_cb.get()
+            grade = grade_entry.get().upper()
+            
+            if not assignment_selection or not grade:
+                raise ValueError("Please select an assignment and enter a grade")
+            
+            if grade not in ['A', 'B', 'C', 'D', 'F']:
+                raise ValueError("Grade must be A, B, C, D, or F")
+            
+            # Extract assignment ID from the formatted string
+            assignment_id = int(assignment_selection.split("ID: ")[1].rstrip(")"))
+            
+            conn = db_connection()
+            if conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                UPDATE student_assignments 
+                SET grade = %s, status = 'Graded'
+                WHERE assignment_id = %s
+                """, (grade, assignment_id))
+                conn.commit()
+                messagebox.showinfo("Success", "Grade submitted successfully!")
+                grade_entry.delete(0, tk.END)
+                callback()
+                cursor.close()
+                conn.close()
+        except ValueError as ve:
+            messagebox.showerror("Input Error", str(ve))
+        except mysql.connector.Error as err:
+            messagebox.showerror("Database Error", f"Error submitting grade: {err}")
+
+    def remove_grade(assignment_cb, callback):
+        try:
+            assignment_selection = assignment_cb.get()
+            if not assignment_selection:
+                raise ValueError("Please select an assignment to remove grade")
+            
+            # Extract assignment ID from the formatted string
+            assignment_id = int(assignment_selection.split("ID: ")[1].rstrip(")"))
+            
+            # Confirm removal
+            if not messagebox.askyesno("Confirm", "Are you sure you want to remove this grade?"):
+                return
+            
+            conn = db_connection()
+            if conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                UPDATE student_assignments 
+                SET grade = NULL, status = 'Submitted'
+                WHERE assignment_id = %s
+                """, (assignment_id,))
+                conn.commit()
+                messagebox.showinfo("Success", "Grade removed successfully!")
+                callback()
+                cursor.close()
+                conn.close()
+        except ValueError as ve:
+            messagebox.showerror("Input Error", str(ve))
+        except mysql.connector.Error as err:
+            messagebox.showerror("Database Error", f"Error removing grade: {err}")
+
+    # Initial data load
+    load_data()
+    
 def submit_grade(assignment_cb, grade_entry):
     assignment_selection = assignment_cb.get()
     grade = grade_entry.get().upper()
@@ -1091,7 +1252,6 @@ def create_student_assignment(faculty_id, student_cb, course_cb, title_entry, de
     except mysql.connector.Error as err:
         messagebox.showerror("Database Error", f"Error creating assignment: {err}")
 
-def create_student_assignment(faculty_id, student_cb, course_cb, title_entry, desc_text, sub_date_entry):
     try:
         student_selection = student_cb.get()
         course_selection = course_cb.get()
