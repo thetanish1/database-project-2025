@@ -100,5 +100,5 @@ department-management-system/
 
 ### 📬 Contact
 Maintainer: Tanish Dewase
-📧 Email: tanishdewase@duck.com
+📧 Email: tanishdewase222@duck.com
 🔗 Project URL: https://github.com/thetanish1/database-project-2025.git
