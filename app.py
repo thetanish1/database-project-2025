@@ -686,9 +686,14 @@ def setup_faculty_tab(tab, dashboard_window, faculty_id):
 
     # Create assignment button - FIXED VERSION
     create_btn = ttk.Button(button_frame, text="Create Assignment",
-                          command=lambda: create_student_assignment(
-                              faculty_id, student_combobox, course_combobox,
-                              title_entry, desc_text, sub_date_entry, load_data))
+                      command=lambda: create_student_assignment(
+                          faculty_id, 
+                          student_combobox, 
+                          course_combobox,
+                          title_entry, 
+                          desc_text, 
+                          sub_date_entry,
+                          load_data))  # Now passing 7 arguments correctly
     create_btn.grid(row=0, column=0, padx=5)
 
     # Remove assignment button
@@ -808,7 +813,7 @@ def setup_faculty_tab(tab, dashboard_window, faculty_id):
 
     # Initial data load
     load_data()
-    
+
 def remove_student_assignment(assignment_cb, callback):
     try:
         assignment_selection = assignment_cb.get()
@@ -1047,10 +1052,10 @@ def create_student_assignment(faculty_id, student_cb, course_cb, title_entry, de
         except ValueError:
             raise ValueError("Date must be in YYYY-MM-DD format")
         
-        # Get student ID
+        # Get student ID from the formatted string (e.g., "1. Alice Brown (ID: 1)")
         student_id = int(student_selection.split("ID: ")[1].rstrip(")"))
         
-        # Get course ID
+        # Get course ID by looking up the course code
         course_code = course_selection.split(" - ")[0]
         
         conn = db_connection()
@@ -1075,7 +1080,7 @@ def create_student_assignment(faculty_id, student_cb, course_cb, title_entry, de
             desc_text.delete("1.0", tk.END)
             sub_date_entry.delete(0, tk.END)
             
-            # Refresh data
+            # Refresh data using callback
             callback()
             
             cursor.close()
